@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>우리학교 급식 한눈에 보기</title>
+  <meta name="description" content="이번 주 급식 메뉴, 만족도 별점, 메뉴 추천, 급식 건의사항을 한 곳에서." />
+
+  <!--
+    ============================================================
+    우리학교 급식 단일 파일 웹앱 (HTML + CSS + JS)
+    - 학생용. 서버/DB/로컬스토리지 사용 안 함 (메모리 전용).
+    - 4개 탭: 홈 / 오늘의 별점 / 메뉴 추천 / 우리급식 건의사항
+    ------------------------------------------------------------
+    수정 가이드 (자주 바꾸게 되는 부분):
+    1) 이번 주 메뉴 데이터  →  <script> 안의  WEEK_MENU  변수
+    2) 구글폼 링크          →  <script> 안의  GOOGLE_FORM_URL  상수
+    3) 카드 색상(파스텔)    →  :root 의  --c-mon ~ --c-sat
+    4) 폰트                →  <link> 의 Google Fonts (Pretendard)
+    ============================================================
+  -->
+
+  <!-- 폰트: Pretendard (선택) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"
+  />
+
+  <style>
+    /* ============================================================
+       디자인 토큰 — 파스텔 무지개 카드, 밝은 배경
+       (요일별 카드 색은 --c-mon ~ --c-sat 에서 한 번에 바꾸세요)
+       ============================================================ */
+    :root {
+      --bg: #fffaf3;
+      --surface: #ffffff;
+      --ink: #1f2433;
+      --ink-muted: #5b6275;
+      --ink-faint: #9aa1b1;
+      --border: #ececf2;
+      --primary: #ff8a3d;
+      --primary-hover: #f47012;
+      --primary-soft: #fff1e3;
+      --focus: #2563eb;
+      --shadow-sm: 0 1px 2px rgba(20, 24, 40, 0.04);
+      --shadow-md: 0 8px 24px rgba(20, 24, 40, 0.08);
+      --shadow-lg: 0 18px 40px rgba(20, 24, 40, 0.14);
+      --radius-sm: 10px;
+      --radius-md: 16px;
+      --radius-lg: 22px;
+
+      /* 요일별 파스텔 무지개 색  (수정 포인트) */
+      --c-mon: #ffd7bf; /* 월 - 주황 */
+      --c-tue: #ffeeb0; /* 화 - 노랑 */
+      --c-wed: #c8edc4; /* 수 - 초록 */
+      --c-thu: #c5dffb; /* 목 - 파랑 */
+      --c-fri: #dccaf3; /* 금 - 보라 */
+      --c-sat: #e3e5ec; /* 토 - 회색 */
+
+      --c-mon-ink: #8b3b00;
+      --c-tue-ink: #7a5a00;
+      --c-wed-ink: #205c1d;
+      --c-thu-ink: #134c87;
+      --c-fri-ink: #4a2c87;
+      --c-sat-ink: #3a3f4d;
+    }
+
+    *,
+    *::before,
+    *::after { box-sizing: border-box; }
+
+    html, body { margin: 0; padding: 0; }
+
+    body {
+      font-family: "Pretendard", "Pretendard Variable", -apple-system,
+        BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", system-ui,
+        sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* 살짝 따뜻한 그라데이션 배경 */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background:
+        radial-gradient(900px 500px at 10% -10%, #ffe3cc 0%, transparent 60%),
+        radial-gradient(800px 500px at 110% 10%, #e6efff 0%, transparent 55%),
+        var(--bg);
+    }
+
+    a { color: inherit; }
+
+    button, input, textarea, select {
+      font: inherit;
+      color: inherit;
+    }
+
+    :focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+      border-radius: 6px;
+    }
+
+    /* ============================================================
+       레이아웃
+       ============================================================ */
+    .page {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 24px 20px 80px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 4px 18px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #ffb574, #ff8a3d);
+      display: grid;
+      place-items: center;
+      color: white;
+      font-size: 18px;
+      box-shadow: var(--shadow-sm);
+    }
+    .brand-name { font-size: 15px; }
+    .brand-sub {
+      color: var(--ink-muted);
+      font-size: 13px;
+      margin-left: 4px;
+    }
+    .today-pill {
+      margin-left: auto;
+      font-size: 13px;
+      color: var(--ink-muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 999px;
+    }
+
+    /* 탭 ----------------------------------------------------- */
+    .tablist {
+      position: sticky;
+      top: 8px;
+      z-index: 10;
+      display: flex;
+      gap: 6px;
+      padding: 6px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      box-shadow: var(--shadow-sm);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tablist::-webkit-scrollbar { display: none; }
+
+    .tab {
+      flex: 1 0 auto;
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--ink-muted);
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    }
+    .tab:hover { background: rgba(0, 0, 0, 0.04); color: var(--ink); }
+    .tab[aria-selected="true"] {
+      background: var(--ink);
+      color: #fff;
+      box-shadow: var(--shadow-sm);
+    }
+    .tab:focus-visible { outline-offset: 3px; }
+
+    /* 패널 ---------------------------------------------------- */
+    .panel { display: none; padding-top: 28px; }
+    .panel.is-active { display: block; animation: fade 0.25s ease both; }
+    @keyframes fade {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    .section-head { margin-bottom: 18px; }
+    .section-title {
+      font-size: clamp(22px, 3.2vw, 30px);
+      letter-spacing: -0.02em;
+      font-weight: 800;
+      margin: 0 0 6px;
+    }
+    .section-desc {
+      color: var(--ink-muted);
+      margin: 0;
+      max-width: 60ch;
+    }
+
+    /* ============================================================
+       홈 — 요일 카드 그리드
+       ============================================================ */
+    .week-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-top: 8px;
+    }
+
+    .day-card {
+      --card: var(--c-mon);
+      --card-ink: var(--c-mon-ink);
+      background: var(--card);
+      color: var(--card-ink);
+      border-radius: var(--radius-lg);
+      padding: 18px 18px 16px;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      border: 2px solid transparent;
+    }
+    .day-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    .day-card[data-day="mon"] { --card: var(--c-mon); --card-ink: var(--c-mon-ink); }
+    .day-card[data-day="tue"] { --card: var(--c-tue); --card-ink: var(--c-tue-ink); }
+    .day-card[data-day="wed"] { --card: var(--c-wed); --card-ink: var(--c-wed-ink); }
+    .day-card[data-day="thu"] { --card: var(--c-thu); --card-ink: var(--c-thu-ink); }
+    .day-card[data-day="fri"] { --card: var(--c-fri); --card-ink: var(--c-fri-ink); }
+    .day-card[data-day="sat"] { --card: var(--c-sat); --card-ink: var(--c-sat-ink); }
+
+    .day-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .day-name {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+    .day-date {
+      font-size: 12px;
+      opacity: 0.7;
+      font-variant-numeric: tabular-nums;
+    }
+    .menu-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 14px;
+    }
+    .menu-list li {
+      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.6);
+      border-radius: 8px;
+    }
+
+    /* 오늘 강조 */
+    .day-card.is-today {
+      border-color: rgba(0, 0, 0, 0.55);
+      box-shadow: var(--shadow-lg);
+      transform: translateY(-2px);
+    }
+    .badge-today {
+      display: none;
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: var(--ink);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 999px;
+      letter-spacing: 0.02em;
+    }
+    .day-card.is-today .badge-today { display: inline-flex; }
+
+    /* ============================================================
+       별점 섹션
+       ============================================================ */
+    .rating-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      text-align: center;
+      box-shadow: var(--shadow-sm);
+    }
+    .stars {
+      display: inline-flex;
+      gap: 4px;
+      font-size: 38px;
+      line-height: 1;
+      color: #f5b400;
+      filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.06));
+      user-select: none;
+    }
+    .stars span { transition: transform 0.15s ease; }
+    .stars:hover span { transform: scale(1.05) rotate(-2deg); }
+
+    .btn {
+      appearance: none;
+      border: 0;
+      background: var(--primary);
+      color: white;
+      font-weight: 700;
+      padding: 12px 20px;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+    .btn:active { transform: translateY(0); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--border);
+      box-shadow: none;
+    }
+    .btn-ghost:hover { background: rgba(0, 0, 0, 0.04); }
+
+    .rating-note {
+      font-size: 13px;
+      color: var(--ink-muted);
+    }
+
+    /* ============================================================
+       폼 + 게시판 카드 (메뉴 추천 / 건의사항 공통)
+       ============================================================ */
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 22px;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 22px;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .field label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-muted);
+    }
+    .field input,
+    .field textarea {
+      width: 100%;
+      background: #fafbfd;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .field input:focus,
+    .field textarea:focus {
+      background: #fff;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-soft);
+      outline: none;
+    }
+    .field textarea { min-height: 96px; resize: vertical; }
+    .field .hint { font-size: 12px; color: var(--ink-faint); }
+    .field.has-error input,
+    .field.has-error textarea {
+      border-color: #d84a59;
+      background: #fff5f6;
+    }
+    .field .err-msg { font-size: 12px; color: #d84a59; display: none; }
+    .field.has-error .err-msg { display: block; }
+
+    .form-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .post-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .post-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      animation: pop 0.25s ease both;
+    }
+    @keyframes pop {
+      from { opacity: 0; transform: translateY(6px) scale(0.98); }
+      to   { opacity: 1; transform: none; }
+    }
+    .post-title {
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      font-size: 15px;
+    }
+    .post-body {
+      font-size: 14px;
+      color: var(--ink);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .post-meta {
+      font-size: 12px;
+      color: var(--ink-faint);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .empty-state {
+      border: 1.5px dashed var(--border);
+      border-radius: var(--radius-md);
+      padding: 28px;
+      text-align: center;
+      color: var(--ink-muted);
+      background: rgba(255, 255, 255, 0.5);
+    }
+    .empty-state strong { color: var(--ink); display: block; margin-bottom: 4px; }
+
+    /* ============================================================
+       반응형
+       ============================================================ */
+    @media (max-width: 720px) {
+      .page { padding: 16px 14px 64px; }
+      .week-grid { grid-template-columns: 1fr; }
+      .post-list { grid-template-columns: 1fr; }
+      .tab { padding: 9px 12px; font-size: 14px; }
+      .rating-card { padding: 22px; }
+      .stars { font-size: 32px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        transition-duration: 0.001ms !important;
+      }
+    }
+
+    /* 스크린리더 전용 */
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      margin: -1px; padding: 0; overflow: hidden;
+      clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">🍱</span>
+        <span class="brand-name">우리학교 급식</span>
+        <span class="brand-sub">학생용</span>
+      </div>
+      <span class="today-pill" id="todayPill" aria-live="polite">오늘</span>
+    </header>
+
+    <!-- 탭 바: 4개 탭 (JS show/hide) -->
+    <div class="tablist" role="tablist" aria-label="섹션 선택">
+      <button class="tab" role="tab" id="tab-home"     aria-controls="panel-home"     aria-selected="true"  data-target="home">🏠 홈</button>
+      <button class="tab" role="tab" id="tab-rating"   aria-controls="panel-rating"   aria-selected="false" data-target="rating">⭐ 오늘의 별점</button>
+      <button class="tab" role="tab" id="tab-recommend" aria-controls="panel-recommend" aria-selected="false" data-target="recommend">🍴 메뉴 추천</button>
+      <button class="tab" role="tab" id="tab-suggest"  aria-controls="panel-suggest"  aria-selected="false" data-target="suggest">💬 우리급식 건의사항</button>
+    </div>
+
+    <!-- ====================== 홈 패널 ====================== -->
+    <section id="panel-home" class="panel is-active" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
+      <div class="section-head">
+        <h1 class="section-title">이번 주 급식 한눈에 보기</h1>
+        <p class="section-desc">월요일부터 토요일까지의 메뉴를 카드로 모아봤어요. 오늘의 카드는 진하게 표시됩니다.</p>
+      </div>
+      <div class="week-grid" id="weekGrid" aria-label="이번 주 요일별 메뉴">
+        <!-- 카드는 JS에서 WEEK_MENU 데이터로 생성됩니다 -->
+      </div>
+    </section>
+
+    <!-- ====================== 별점 패널 ====================== -->
+    <section id="panel-rating" class="panel" role="tabpanel" aria-labelledby="tab-rating" tabindex="0">
+      <div class="section-head">
+        <h2 class="section-title">오늘 급식 만족도 평점 설문</h2>
+        <p class="section-desc">오늘 먹은 급식이 어땠나요? 별점은 구글 폼에서 남길 수 있어요. 1분이면 끝나요.</p>
+      </div>
+
+      <div class="rating-card">
+        <div class="stars" aria-label="별점 미리보기 (5점 만점)" role="img">
+          <span aria-hidden="true">★</span>
+          <span aria-hidden="true">★</span>
+          <span aria-hidden="true">★</span>
+          <span aria-hidden="true">★</span>
+          <span aria-hidden="true">★</span>
+        </div>
+        <p class="rating-note">아래 버튼을 누르면 새 탭으로 구글 폼이 열립니다.</p>
+        <!--
+          ↓↓↓ 구글폼 링크 변경 위치 ↓↓↓
+          아래 #goToFormBtn 버튼은 클릭 시 GOOGLE_FORM_URL 상수의 주소를 새 탭으로 엽니다.
+          실제 폼이 만들어지면 <script> 안에 있는  GOOGLE_FORM_URL  값을
+          진짜 구글 폼 주소로 바꿔주세요.
+          (현재는 placeholder: https://example.com/form)
+        -->
+        <button class="btn" id="goToFormBtn" type="button" aria-label="구글 폼으로 이동해 별점 남기기">
+          ⭐ 별점 남기러 가기
+        </button>
+        <p class="rating-note" id="formUrlPreview" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <!-- ====================== 메뉴 추천 패널 ====================== -->
+    <section id="panel-recommend" class="panel" role="tabpanel" aria-labelledby="tab-recommend" tabindex="0">
+      <div class="section-head">
+        <h2 class="section-title">이런 메뉴는 어때요?</h2>
+        <p class="section-desc">먹고 싶은 메뉴를 자유롭게 추천해 주세요. 등록한 추천은 새로고침하면 사라져요 (메모리 전용).</p>
+      </div>
+
+      <form class="form-card" id="recommendForm" novalidate>
+        <div class="field" data-field>
+          <label for="rec-name">추천 메뉴 이름</label>
+          <input
+            id="rec-name"
+            name="name"
+            type="text"
+            maxlength="40"
+            placeholder="예) 마라탕, 치즈돈까스, 떡볶이…"
+            aria-required="true"
+          />
+          <span class="err-msg">메뉴 이름을 입력해주세요.</span>
+        </div>
+        <div class="field" data-field>
+          <label for="rec-reason">간단한 이유</label>
+          <textarea
+            id="rec-reason"
+            name="reason"
+            maxlength="300"
+            placeholder="왜 이 메뉴가 좋을까요? (한 줄이면 충분해요)"
+            aria-required="true"
+          ></textarea>
+          <span class="hint">최대 300자</span>
+          <span class="err-msg">짧게라도 이유를 적어주세요.</span>
+        </div>
+        <div class="form-row">
+          <button class="btn-ghost btn" type="reset">초기화</button>
+          <button class="btn" type="submit">추천 등록</button>
+        </div>
+      </form>
+
+      <div id="recommendList" class="post-list" aria-live="polite" aria-label="등록된 메뉴 추천 목록"></div>
+      <div id="recommendEmpty" class="empty-state">
+        <strong>아직 등록된 추천이 없어요</strong>
+        가장 먹고 싶은 메뉴를 첫 번째로 추천해보세요!
+      </div>
+    </section>
+
+    <!-- ====================== 건의사항 패널 ====================== -->
+    <section id="panel-suggest" class="panel" role="tabpanel" aria-labelledby="tab-suggest" tabindex="0">
+      <div class="section-head">
+        <h2 class="section-title">우리급식 건의사항</h2>
+        <p class="section-desc">현재 급식에 대한 개선 의견을 자유롭게 적는 공간이에요. 작성한 글은 새로고침하면 사라집니다 (메모리 전용).</p>
+      </div>
+
+      <form class="form-card" id="suggestForm" novalidate>
+        <div class="field" data-field>
+          <label for="sug-title">제목</label>
+          <input
+            id="sug-title"
+            name="title"
+            type="text"
+            maxlength="60"
+            placeholder="예) 배식 줄이 너무 길어요"
+            aria-required="true"
+          />
+          <span class="err-msg">제목을 입력해주세요.</span>
+        </div>
+        <div class="field" data-field>
+          <label for="sug-body">내용</label>
+          <textarea
+            id="sug-body"
+            name="body"
+            maxlength="800"
+            placeholder="개선되었으면 하는 점을 구체적으로 적어주세요."
+            aria-required="true"
+          ></textarea>
+          <span class="hint">최대 800자</span>
+          <span class="err-msg">내용을 입력해주세요.</span>
+        </div>
+        <div class="form-row">
+          <button class="btn-ghost btn" type="reset">초기화</button>
+          <button class="btn" type="submit">건의 등록</button>
+        </div>
+      </form>
+
+      <div id="suggestList" class="post-list" aria-live="polite" aria-label="등록된 건의사항 목록"></div>
+      <div id="suggestEmpty" class="empty-state">
+        <strong>아직 등록된 건의가 없어요</strong>
+        우리 급식이 더 좋아질 수 있는 의견을 들려주세요.
+      </div>
+    </section>
+  </main>
+
+  <script>
+    /* ============================================================
+       1) 데이터 — 이번 주 메뉴
+       ------------------------------------------------------------
+       ★ 매주 메뉴를 바꿀 때 이 객체만 수정하면 됩니다.
+       ★ 한 줄에 한 메뉴씩, 자유롭게 추가/삭제 가능합니다.
+       ★ 토요일이 없는 주에는 sat 배열을 비워두세요 (`sat: []`).
+       ============================================================ */
+    const WEEK_MENU = {
+      mon: {
+        label: "월요일",
+        items: ["흑미밥", "소고기무국", "제육볶음", "콩나물무침", "배추김치", "요구르트"],
+      },
+      tue: {
+        label: "화요일",
+        items: ["잡곡밥", "감자된장국", "치즈돈까스", "양배추샐러드", "총각김치", "오렌지"],
+      },
+      wed: {
+        label: "수요일",
+        items: ["김치볶음밥", "계란국", "치킨너겟", "단무지", "깍두기", "초코우유"],
+      },
+      thu: {
+        label: "목요일",
+        items: ["기장밥", "쇠고기미역국", "고등어구이", "시금치나물", "배추김치", "사과"],
+      },
+      fri: {
+        label: "금요일",
+        items: ["스파게티", "마늘빵", "옥수수콘샐러드", "피클", "오이무침", "딸기우유"],
+      },
+      sat: {
+        label: "토요일",
+        // 토요일 급식이 없는 주에는 아래 배열을 [] 로 비워두면 토요일 카드가 자동으로 숨겨집니다.
+        items: ["참치마요덮밥", "유부장국", "떡볶이", "김말이튀김", "깍두기", "파인애플"],
+      },
+    };
+
+    /* ============================================================
+       2) 구글 폼 링크
+       ------------------------------------------------------------
+       ★ 실제 구글 폼이 생기면 아래 GOOGLE_FORM_URL 값을 진짜 주소로
+         바꿔주세요. 현재는 placeholder URL입니다.
+       예) "https://docs.google.com/forms/d/e/XXXXX/viewform"
+       ============================================================ */
+    const GOOGLE_FORM_URL = "https://example.com/form"; // ← 여기를 진짜 구글 폼 주소로 교체
+
+    /* ============================================================
+       3) 탭 컨트롤러 (show/hide, 키보드 좌우 이동 지원)
+       ============================================================ */
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const panels = {
+      home: document.getElementById("panel-home"),
+      rating: document.getElementById("panel-rating"),
+      recommend: document.getElementById("panel-recommend"),
+      suggest: document.getElementById("panel-suggest"),
+    };
+
+    function activateTab(target) {
+      tabs.forEach((t) => {
+        const isActive = t.dataset.target === target;
+        t.setAttribute("aria-selected", String(isActive));
+        t.tabIndex = isActive ? 0 : -1;
+      });
+      Object.entries(panels).forEach(([key, el]) => {
+        el.classList.toggle("is-active", key === target);
+      });
+    }
+
+    tabs.forEach((tab, idx) => {
+      tab.addEventListener("click", () => activateTab(tab.dataset.target));
+      tab.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowRight" && e.key !== "ArrowLeft" && e.key !== "Home" && e.key !== "End") return;
+        e.preventDefault();
+        let nextIdx = idx;
+        if (e.key === "ArrowRight") nextIdx = (idx + 1) % tabs.length;
+        else if (e.key === "ArrowLeft") nextIdx = (idx - 1 + tabs.length) % tabs.length;
+        else if (e.key === "Home") nextIdx = 0;
+        else if (e.key === "End") nextIdx = tabs.length - 1;
+        tabs[nextIdx].focus();
+        activateTab(tabs[nextIdx].dataset.target);
+      });
+    });
+
+    /* ============================================================
+       4) 홈 — 요일 카드 렌더링 + 오늘 강조
+       ============================================================ */
+    const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+    const KOR_WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
+
+    function getTodayKey(now = new Date()) {
+      // 일요일이면 다음 월요일을 강조 대상으로
+      const d = now.getDay();
+      if (d === 0) return "mon";
+      return DAY_KEYS[d];
+    }
+
+    function isSundayToday(now = new Date()) {
+      return now.getDay() === 0;
+    }
+
+    function renderWeek() {
+      const grid = document.getElementById("weekGrid");
+      const todayKey = getTodayKey();
+      const order = ["mon", "tue", "wed", "thu", "fri", "sat"];
+
+      grid.innerHTML = "";
+      order.forEach((key) => {
+        const data = WEEK_MENU[key];
+        if (!data) return;
+        // 토요일이고 메뉴가 없으면 카드 자체를 그리지 않음
+        if (key === "sat" && (!data.items || data.items.length === 0)) return;
+
+        const card = document.createElement("article");
+        card.className = "day-card";
+        card.dataset.day = key;
+        if (key === todayKey) card.classList.add("is-today");
+
+        const items = (data.items || []).map((m) => `<li>${escapeHtml(m)}</li>`).join("") ||
+          `<li style="background:transparent;opacity:.7;">메뉴 정보가 없어요</li>`;
+
+        card.innerHTML = `
+          <span class="badge-today" aria-label="오늘">오늘</span>
+          <div class="day-head">
+            <span class="day-name">${escapeHtml(data.label)}</span>
+            <span class="day-date">${dayLabelDate(key)}</span>
+          </div>
+          <ul class="menu-list" aria-label="${escapeHtml(data.label)} 메뉴">${items}</ul>
+        `;
+        grid.appendChild(card);
+      });
+
+      // 상단 today pill
+      const now = new Date();
+      const pill = document.getElementById("todayPill");
+      const dateStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")} (${KOR_WEEKDAY[now.getDay()]})`;
+      pill.textContent = isSundayToday()
+        ? `${dateStr} · 다음 월요일 메뉴 표시`
+        : `오늘 · ${dateStr}`;
+    }
+
+    // 이번 주 기준 해당 요일의 날짜를 "M.D" 형태로 표시
+    function dayLabelDate(key) {
+      const now = new Date();
+      const targetIdx = DAY_KEYS.indexOf(key); // 1..6
+      const today = now.getDay() === 0 ? 1 : now.getDay(); // 일요일이면 월요일 기준
+      const diff = targetIdx - today;
+      const d = new Date(now);
+      d.setDate(now.getDate() + diff);
+      return `${d.getMonth() + 1}.${d.getDate()}`;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      })[c]);
+    }
+
+    /* ============================================================
+       5) 별점 — 구글 폼 새 탭 열기
+       ============================================================ */
+    const formBtn = document.getElementById("goToFormBtn");
+    const formPreview = document.getElementById("formUrlPreview");
+    formPreview.textContent = `링크: ${GOOGLE_FORM_URL}`;
+    formBtn.addEventListener("click", () => {
+      // 새 탭으로 안전하게 열기
+      window.open(GOOGLE_FORM_URL, "_blank", "noopener,noreferrer");
+    });
+
+    /* ============================================================
+       6) 게시판 (메뉴 추천 / 건의사항)
+       - 메모리 전용. 새로고침하면 사라집니다 (요구사항).
+       ============================================================ */
+    function setupBoard({ formId, listId, emptyId, fields, render }) {
+      const form = document.getElementById(formId);
+      const list = document.getElementById(listId);
+      const empty = document.getElementById(emptyId);
+      const items = []; // 메모리 저장소
+
+      function refresh() {
+        list.innerHTML = "";
+        if (items.length === 0) {
+          empty.style.display = "";
+          return;
+        }
+        empty.style.display = "none";
+        items.forEach((item) => {
+          const card = document.createElement("article");
+          card.className = "post-card";
+          card.innerHTML = render(item);
+          list.appendChild(card);
+        });
+      }
+
+      function validate() {
+        let ok = true;
+        fields.forEach(({ name }) => {
+          const input = form.elements[name];
+          const wrap = input.closest("[data-field]");
+          const val = (input.value || "").trim();
+          if (!val) {
+            wrap.classList.add("has-error");
+            ok = false;
+          } else {
+            wrap.classList.remove("has-error");
+          }
+        });
+        return ok;
+      }
+
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (!validate()) {
+          // 첫 에러 필드로 포커스
+          const firstErr = form.querySelector(".has-error input, .has-error textarea");
+          if (firstErr) firstErr.focus();
+          return;
+        }
+        const entry = { time: new Date() };
+        fields.forEach(({ name }) => {
+          entry[name] = form.elements[name].value.trim();
+        });
+        items.unshift(entry); // 최신이 위
+        form.reset();
+        refresh();
+      });
+
+      // 입력 시 에러 해제
+      form.addEventListener("input", (e) => {
+        const wrap = e.target.closest("[data-field]");
+        if (wrap && e.target.value.trim()) wrap.classList.remove("has-error");
+      });
+
+      // 초기화 버튼: 에러도 같이 지움
+      form.addEventListener("reset", () => {
+        form.querySelectorAll(".has-error").forEach((el) => el.classList.remove("has-error"));
+      });
+
+      refresh();
+    }
+
+    function fmtTime(d) {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getMonth() + 1}.${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    setupBoard({
+      formId: "recommendForm",
+      listId: "recommendList",
+      emptyId: "recommendEmpty",
+      fields: [{ name: "name" }, { name: "reason" }],
+      render: (it) => `
+        <div class="post-title">🍴 ${escapeHtml(it.name)}</div>
+        <div class="post-body">${escapeHtml(it.reason)}</div>
+        <div class="post-meta">${fmtTime(it.time)} 등록</div>
+      `,
+    });
+
+    setupBoard({
+      formId: "suggestForm",
+      listId: "suggestList",
+      emptyId: "suggestEmpty",
+      fields: [{ name: "title" }, { name: "body" }],
+      render: (it) => `
+        <div class="post-title">💬 ${escapeHtml(it.title)}</div>
+        <div class="post-body">${escapeHtml(it.body)}</div>
+        <div class="post-meta">${fmtTime(it.time)} 등록</div>
+      `,
+    });
+
+    /* ============================================================
+       7) 시작 시 렌더
+       ============================================================ */
+    renderWeek();
+  </script>
+</body>
+</html>
